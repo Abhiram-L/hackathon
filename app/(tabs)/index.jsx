@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { 
   View, 
   Text, 
@@ -7,105 +7,111 @@ import {
   StyleSheet, 
   Dimensions, 
   Platform,
-  StatusBar 
+  StatusBar,
+  Alert
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withSpring, 
-  withTiming, 
-  interpolate,
-  runOnJS,
-  FadeIn,
-  FadeOut,
-  ZoomIn,
-  ZoomOut,
-  SlideInDown
-} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+import { useAuthStore } from '../../store/auth';
+import axios from 'axios';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://your-backend-url.com'; 
 
 const PhotoUpload = () => {
   const [photo, setPhoto] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const navigation = useNavigation();
+  const { user } = useAuthStore();
   
-  // Animation values
-  const buttonScale = useSharedValue(1);
-  const imageOpacity = useSharedValue(0);
-  const uploadProgress = useSharedValue(0);
-  const checkmarkScale = useSharedValue(0);
-  
-  // Animated styles
-  const buttonAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: buttonScale.value }],
-    };
-  });
-  
-  const imageAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: imageOpacity.value,
-      transform: [
-        { scale: interpolate(imageOpacity.value, [0, 1], [0.8, 1]) }
-      ]
-    };
-  });
-  
-  const progressAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      width: `${uploadProgress.value * 100}%`,
-    };
-  });
-  
-  const checkmarkAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: checkmarkScale.value }],
-      opacity: checkmarkScale.value,
-    };
-  });
-  
-  const onButtonPress = (button) => {
-    // Button press animation
-    buttonScale.value = withSpring(0.95, { damping: 15 });
-    setTimeout(() => {
-      buttonScale.value = withSpring(1, { damping: 15 });
-    }, 100);
-    
-    if (button === 'camera') {
-      handleTakePhoto();
-    } else {
-      handleChoosePhoto();
-    }
-  };
-  
-  const simulateUpload = () => {
-    setIsUploading(true);
-    
-    // Reset progress
-    uploadProgress.value = 0;
-    
-    // Animate progress
-    uploadProgress.value = withTiming(1, { duration: 2000 }, (finished) => {
-      if (finished) {
-        runOnJS(setIsUploading)(false);
-        runOnJS(setUploadComplete)(true);
-        
-        // Animate checkmark
-        checkmarkScale.value = withSpring(1, { damping: 10 });
-        
-        // Reset after some time
-        setTimeout(() => {
-          checkmarkScale.value = withTiming(0, { duration: 300 });
-          setTimeout(() => {
-            runOnJS(setUploadComplete)(false);
-          }, 300);
-        }, 2000);
+  // Upload photo to backend
+  const uploadPhotoToServer = async (uri) => {
+    try {
+      setIsUploading(true);
+      setUploadError(null);
+      
+      // Reset progress
+      setUploadProgress(0);
+      
+      // Create form data for the upload
+      const formData = new FormData();
+      
+      // Platform-specific code for getting the image
+      if (Platform.OS === 'web') {
+        // For web: Fetch the image as a blob
+        const response = await fetch(uri);
+        const blob = await response.blob();
+        formData.append('image', blob, `photo-${Date.now()}.jpg`);
+      } else {
+        // For native platforms: Use the URI directly
+        formData.append('image', {
+          uri: uri,
+          type: 'image/jpeg',
+          name: `photo-${Date.now()}.jpg`,
+        });
       }
-    });
+      
+      // Add the user ID to form data
+      formData.append('userId', user?.id?.toString() || '1');
+
+      // Get authentication token from the user object
+      const token = user?.token || '';
+      
+      // Setup axios config with proper authentication
+      const config = {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const progress = progressEvent.loaded / progressEvent.total;
+            // Update the progress display
+            setUploadProgress(progress);
+          }
+        }
+      };
+      
+      // Send request using axios
+      const response = await axios.post(
+        `${API_URL}/api/analyze-product`, 
+        formData, 
+        config
+      );
+      
+      // Complete the progress
+      setUploadProgress(1);
+      setIsUploading(false);
+      setUploadComplete(true);
+      setUploadResult(response.data);
+      
+      // Navigate to Display screen with the data
+      setTimeout(() => {
+        navigation.navigate('Display', { data: response.data });
+      }, 2000);
+      
+    } catch (error) {
+      console.error('Error uploading photo:', error);
+      let errorMessage = 'There was a problem uploading your photo. Please try again.';
+      
+      if (error.response) {
+        // The server responded with an error
+        errorMessage = error.response.data.error || errorMessage;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setUploadError(errorMessage);
+      setIsUploading(false);
+      Alert.alert('Upload Failed', errorMessage, [{ text: 'OK' }]);
+      setUploadProgress(0);
+    }
   };
 
   const handleImageSelected = (result) => {
@@ -113,12 +119,9 @@ const PhotoUpload = () => {
       const selectedUri = result.assets[0].uri;
       setPhoto(selectedUri);
       
-      // Animate image appearance
-      imageOpacity.value = withTiming(1, { duration: 800 });
-      
-      // Simulate upload process
+      // Upload the photo after a short delay to let UI update
       setTimeout(() => {
-        simulateUpload();
+        uploadPhotoToServer(selectedUri);
       }, 500);
     }
   };
@@ -128,7 +131,7 @@ const PhotoUpload = () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (permissionResult.granted === false) {
-      alert('Permission to access the photo library is required!');
+      Alert.alert('Permission Denied', 'Permission to access the photo library is required!');
       return;
     }
 
@@ -148,7 +151,7 @@ const PhotoUpload = () => {
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
 
     if (permissionResult.granted === false) {
-      alert('Permission to access the camera is required!');
+      Alert.alert('Permission Denied', 'Permission to access the camera is required!');
       return;
     }
 
@@ -165,36 +168,50 @@ const PhotoUpload = () => {
   const renderPhotoContainer = () => {
     if (isUploading) {
       return (
-        <Animated.View 
-          entering={FadeIn.duration(300)}
-          style={styles.uploadingContainer}
-        >
-          <Text style={styles.uploadingText}>Uploading photo...</Text>
+        <View style={styles.uploadingContainer}>
+          <Text style={styles.uploadingText}>Analyzing product...</Text>
           <View style={styles.progressBarContainer}>
-            <Animated.View style={[styles.progressBar, progressAnimatedStyle]} />
+            <View style={[styles.progressBar, { width: `${uploadProgress * 100}%` }]} />
           </View>
-        </Animated.View>
+          <Text style={styles.uploadingSubtext}>This may take a moment</Text>
+        </View>
+      );
+    }
+    
+    if (uploadError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={60} color="#f44336" />
+          <Text style={styles.errorText}>Upload Failed</Text>
+          <Text style={styles.errorSubtext}>{uploadError}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => {
+              setPhoto(null);
+              setUploadError(null);
+            }}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
       );
     }
     
     if (uploadComplete) {
       return (
-        <Animated.View 
-          entering={ZoomIn.duration(300)}
-          exiting={FadeOut.duration(300)}
-          style={styles.successContainer}
-        >
-          <Animated.View style={[styles.successCircle, checkmarkAnimatedStyle]}>
+        <View style={styles.successContainer}>
+          <View style={styles.successCircle}>
             <Ionicons name="checkmark-sharp" size={60} color="#fff" />
-          </Animated.View>
-          <Text style={styles.successText}>Upload Complete!</Text>
-        </Animated.View>
+          </View>
+          <Text style={styles.successText}>Analysis Complete!</Text>
+          <Text style={styles.successSubtext}>Taking you to results...</Text>
+        </View>
       );
     }
     
     if (photo) {
       return (
-        <Animated.View style={[styles.photoContainer, imageAnimatedStyle]}>
+        <View style={styles.photoContainer}>
           <Image source={{ uri: photo }} style={styles.image} />
           <LinearGradient
             colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.7)']}
@@ -202,27 +219,22 @@ const PhotoUpload = () => {
           >
             <TouchableOpacity 
               style={styles.retakeButton}
-              onPress={() => {
-                imageOpacity.value = withTiming(0, { duration: 300 });
-                setTimeout(() => setPhoto(null), 300);
-              }}
+              onPress={() => setPhoto(null)}
             >
               <Ionicons name="refresh" size={20} color="#fff" />
               <Text style={styles.retakeText}>Retake</Text>
             </TouchableOpacity>
           </LinearGradient>
-        </Animated.View>
+        </View>
       );
     }
     
     return (
-      <Animated.View 
-        entering={FadeIn.duration(500)}
-        style={styles.placeholderContainer}
-      >
+      <View style={styles.placeholderContainer}>
         <Ionicons name="image-outline" size={80} color="#ccc" />
-        <Text style={styles.placeholderText}>No photo selected</Text>
-      </Animated.View>
+        <Text style={styles.placeholderText}>Take a photo of food product</Text>
+        <Text style={styles.placeholderSubtext}>We'll analyze ingredients and suggest alternatives</Text>
+      </View>
     );
   };
 
@@ -230,23 +242,20 @@ const PhotoUpload = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-      <Animated.View 
-        entering={SlideInDown.delay(300).springify()}
-        style={styles.header}
-      >
-        <Text style={styles.title}>Photo Upload</Text>
-        <Text style={styles.subtitle}>Take or choose a photo</Text>
-      </Animated.View>
+      <View style={styles.header}>
+        <Text style={styles.title}>Food Scanner</Text>
+        <Text style={styles.subtitle}>Analyze food products for healthier choices</Text>
+      </View>
       
       <View style={styles.photoArea}>
         {renderPhotoContainer()}
       </View>
       
       <View style={styles.buttonsContainer}>
-        <Animated.View style={[buttonAnimatedStyle, styles.buttonWrapper]}>
+        <View style={styles.buttonWrapper}>
           <TouchableOpacity
             style={[styles.button, styles.cameraButton]}
-            onPress={() => onButtonPress('camera')}
+            onPress={() => handleTakePhoto()}
             activeOpacity={0.9}
             disabled={isUploading || uploadComplete}
           >
@@ -258,12 +267,12 @@ const PhotoUpload = () => {
               <Text style={styles.buttonText}>Take Photo</Text>
             </LinearGradient>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
         
-        <Animated.View style={[buttonAnimatedStyle, styles.buttonWrapper]}>
+        <View style={styles.buttonWrapper}>
           <TouchableOpacity
             style={[styles.button, styles.galleryButton]}
-            onPress={() => onButtonPress('gallery')}
+            onPress={() => handleChoosePhoto()}
             activeOpacity={0.9}
             disabled={isUploading || uploadComplete}
           >
@@ -275,7 +284,7 @@ const PhotoUpload = () => {
               <Text style={styles.buttonText}>Choose Photo</Text>
             </LinearGradient>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </View>
     </View>
   );
@@ -311,19 +320,28 @@ const styles = StyleSheet.create({
   placeholderContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#202020',
     width: width * 0.8,
     height: width * 0.8,
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#e0e0e0',
+    borderColor: '#333',
     borderStyle: 'dashed',
+    padding: 20,
   },
   placeholderText: {
     marginTop: 20,
-    fontSize: 16,
+    fontSize: 18,
+    color: '#ccc',
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  placeholderSubtext: {
+    marginTop: 10,
+    fontSize: 14,
     color: '#999',
+    textAlign: 'center',
   },
   photoContainer: {
     width: width * 0.8,
@@ -374,11 +392,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 20,
     color: '#303f9f',
+    fontWeight: 'bold',
+  },
+  uploadingSubtext: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#777',
   },
   progressBarContainer: {
     width: '100%',
     height: 6,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: '#303030',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -405,6 +429,40 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4caf50',
     marginTop: 10,
+  },
+  successSubtext: {
+    marginTop: 5,
+    fontSize: 14,
+    color: '#777',
+  },
+  errorContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: width * 0.8,
+  },
+  errorText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#f44336',
+    marginTop: 10,
+  },
+  errorSubtext: {
+    marginTop: 5,
+    fontSize: 14,
+    color: '#777',
+    textAlign: 'center',
+    marginHorizontal: 20,
+  },
+  retryButton: {
+    marginTop: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#f44336',
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   buttonsContainer: {
     flexDirection: 'row',
