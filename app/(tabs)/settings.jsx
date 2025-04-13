@@ -50,26 +50,9 @@ export default function Settings() {
     buttonScale.value = withSpring(1);
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to log out?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            await logout();
-            router.replace("/login");
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/login");
   };
 
   const navigateToAboutYou = () => {

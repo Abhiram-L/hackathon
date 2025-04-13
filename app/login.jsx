@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useAuthStore } from '@/store/auth';
 import { useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
 
 const Login = () => {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -12,7 +13,7 @@ const Login = () => {
   const handleLogin = async () => {
     try {
       await login(phoneNumber, password);
-      
+      router.push('/')
     } catch (error) {
       Alert.alert('Login Failed', 'Invalid phone number or password.');
     }

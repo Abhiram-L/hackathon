@@ -27,7 +27,7 @@ export default function Layout() {
     }
     
     // For specific protected routes that require authentication
-    const protectedRoutes = ['generate','display'];
+    const protectedRoutes = ['generate','results'];
     const needsAuth = protectedRoutes.includes(firstSegment);
     
     if (needsAuth && !user) {
@@ -47,7 +47,7 @@ export default function Layout() {
       <Stack.Screen name="aboutyou" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="generate/[id]" options={{ headerShown: false,headerTitle:false }} />
-      <Stack.Screen name="display" options={{ headerShown: false,headerTitle:false }} />
+      <Stack.Screen name='results' options={{ headerShown: false }} />
     </Stack>
   );
 }
