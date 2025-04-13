@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -8,110 +8,85 @@ import {
   Dimensions, 
   Platform,
   StatusBar,
-  Alert
+  SafeAreaView,
+  Animated,
+  ScrollView
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialIcons, Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
-import { useAuthStore } from '../../store/auth';
-import axios from 'axios';
+import { router } from 'expo-router';
 
-const { width } = Dimensions.get('window');
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://your-backend-url.com'; 
+const { width, height } = Dimensions.get('window');
+
+// Dark theme with violet accents
+const COLORS = {
+  background: "#121212",       // Dark background
+  cardBg: "#1E1E1E",           // Dark card background
+  cardShadow: "#000000",       // Shadow color
+  inputBg: "#2C2C2C",          // Input background
+  border: "#333333",           // Dark borders
+  textPrimary: "#FFFFFF",      // White text
+  textSecondary: "#CCCCCC",    // Light gray text
+  textTertiary: "#999999",     // Medium gray text
+  accent: "#9C27B0",           // Violet accent
+  accentLight: "#BA68C8",      // Light violet
+  accentDark: "#7B1FA2",       // Dark violet
+  buttonGradient1: ["#9C27B0", "#673AB7"],   // Violet to purple gradient
+  buttonGradient2: ["#7B1FA2", "#512DA8"],   // Dark violet gradient
+  success: "#4CAF50",          // Green for success
+  successLight: "#A5D6A7",     // Light green
+  progressBar: "#9C27B0",      // Violet for progress
+  danger: "#F44336",           // Red for danger/cancel
+};
 
 const PhotoUpload = () => {
   const [photo, setPhoto] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadComplete, setUploadComplete] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null);
-  const [uploadError, setUploadError] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const navigation = useNavigation();
-  const { user } = useAuthStore();
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(100));
   
-  // Upload photo to backend
-  const uploadPhotoToServer = async (uri) => {
-    try {
-      setIsUploading(true);
-      setUploadError(null);
-      
-      // Reset progress
-      setUploadProgress(0);
-      
-      // Create form data for the upload
-      const formData = new FormData();
-      
-      // Platform-specific code for getting the image
-      if (Platform.OS === 'web') {
-        // For web: Fetch the image as a blob
-        const response = await fetch(uri);
-        const blob = await response.blob();
-        formData.append('image', blob, `photo-${Date.now()}.jpg`);
-      } else {
-        // For native platforms: Use the URI directly
-        formData.append('image', {
-          uri: uri,
-          type: 'image/jpeg',
-          name: `photo-${Date.now()}.jpg`,
-        });
-      }
-      
-      // Add the user ID to form data
-      formData.append('userId', user?.id?.toString() || '1');
+  useEffect(() => {
+    // Animate component mount
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
 
-      // Get authentication token from the user object
-      const token = user?.token || '';
-      
-      // Setup axios config with proper authentication
-      const config = {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
-        },
-        onUploadProgress: (progressEvent) => {
-          if (progressEvent.total) {
-            const progress = progressEvent.loaded / progressEvent.total;
-            // Update the progress display
-            setUploadProgress(progress);
-          }
-        }
-      };
-      
-      // Send request using axios
-      const response = await axios.post(
-        `${API_URL}/api/analyze-product`, 
-        formData, 
-        config
-      );
-      
-      // Complete the progress
-      setUploadProgress(1);
+  // Generate a unique ID for the food item
+  const generateFoodId = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
+  // Navigate to the generate page
+  const navigateToGeneratePage = (id) => {
+    router.push(`/generate/${id}`);
+  };
+  
+  const simulateUpload = () => {
+    setIsUploading(true);
+    
+    setTimeout(() => {
       setIsUploading(false);
       setUploadComplete(true);
-      setUploadResult(response.data);
       
-      // Navigate to Display screen with the data
+      // Navigate after a short delay
       setTimeout(() => {
-        navigation.navigate('Display', { data: response.data });
-      }, 2000);
-      
-    } catch (error) {
-      console.error('Error uploading photo:', error);
-      let errorMessage = 'There was a problem uploading your photo. Please try again.';
-      
-      if (error.response) {
-        // The server responded with an error
-        errorMessage = error.response.data.error || errorMessage;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      setUploadError(errorMessage);
-      setIsUploading(false);
-      Alert.alert('Upload Failed', errorMessage, [{ text: 'OK' }]);
-      setUploadProgress(0);
-    }
+        setUploadComplete(false);
+        const foodId = generateFoodId();
+        navigateToGeneratePage(foodId);
+      }, 1000);
+    }, 1500);
   };
 
   const handleImageSelected = (result) => {
@@ -119,23 +94,21 @@ const PhotoUpload = () => {
       const selectedUri = result.assets[0].uri;
       setPhoto(selectedUri);
       
-      // Upload the photo after a short delay to let UI update
+      // Simulate upload process
       setTimeout(() => {
-        uploadPhotoToServer(selectedUri);
+        simulateUpload();
       }, 500);
     }
   };
 
   const handleChoosePhoto = async () => {
-    // Request permissions for accessing the media library
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (permissionResult.granted === false) {
-      Alert.alert('Permission Denied', 'Permission to access the photo library is required!');
+      alert('Permission to access the photo library is required!');
       return;
     }
 
-    // Launch the image picker
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -147,15 +120,13 @@ const PhotoUpload = () => {
   };
 
   const handleTakePhoto = async () => {
-    // Request permissions for accessing the camera
     const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
 
     if (permissionResult.granted === false) {
-      Alert.alert('Permission Denied', 'Permission to access the camera is required!');
+      alert('Permission to access the camera is required!');
       return;
     }
 
-    // Launch the camera
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 0.8,
@@ -165,333 +136,499 @@ const PhotoUpload = () => {
     handleImageSelected(result);
   };
 
-  const renderPhotoContainer = () => {
+  const renderMainContent = () => {
     if (isUploading) {
       return (
-        <View style={styles.uploadingContainer}>
-          <Text style={styles.uploadingText}>Analyzing product...</Text>
-          <View style={styles.progressBarContainer}>
-            <View style={[styles.progressBar, { width: `${uploadProgress * 100}%` }]} />
+        <View style={styles.stateContainer}>
+          <View style={styles.uploadingContainer}>
+            <View style={styles.uploadingIconContainer}>
+              <MaterialCommunityIcons name="food-apple" size={30} color={COLORS.accent} />
+              <MaterialCommunityIcons 
+                name="arrow-up-circle" 
+                size={20} 
+                color={COLORS.accentLight} 
+                style={styles.cornerIcon}
+              />
+            </View>
+            <Text style={styles.uploadingTitle}>Analyzing Food</Text>
+            <Text style={styles.uploadingSubtitle}>Scanning for ingredients and nutrition</Text>
+            
+            <View style={styles.progressBarBackground}>
+              <Animated.View style={[styles.progressBar, {
+                width: '100%',
+                backgroundColor: COLORS.accent
+              }]} />
+            </View>
           </View>
-          <Text style={styles.uploadingSubtext}>This may take a moment</Text>
-        </View>
-      );
-    }
-    
-    if (uploadError) {
-      return (
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={60} color="#f44336" />
-          <Text style={styles.errorText}>Upload Failed</Text>
-          <Text style={styles.errorSubtext}>{uploadError}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => {
-              setPhoto(null);
-              setUploadError(null);
-            }}
-          >
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
         </View>
       );
     }
     
     if (uploadComplete) {
       return (
-        <View style={styles.successContainer}>
-          <View style={styles.successCircle}>
-            <Ionicons name="checkmark-sharp" size={60} color="#fff" />
+        <View style={styles.stateContainer}>
+          <View style={styles.successContainer}>
+            <View style={styles.successCircle}>
+              <Ionicons name="checkmark-sharp" size={36} color="#FFFFFF" />
+            </View>
+            <Text style={styles.successTitle}>Food Analyzed!</Text>
+            <Text style={styles.successSubtitle}>Preparing your results...</Text>
           </View>
-          <Text style={styles.successText}>Analysis Complete!</Text>
-          <Text style={styles.successSubtext}>Taking you to results...</Text>
         </View>
       );
     }
     
     if (photo) {
       return (
-        <View style={styles.photoContainer}>
+        <View style={styles.photoWrapper}>
           <Image source={{ uri: photo }} style={styles.image} />
-          <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.7)']}
-            style={styles.imageGradient}
+          <TouchableOpacity 
+            style={styles.retakeButton}
+            onPress={() => setPhoto(null)}
           >
-            <TouchableOpacity 
-              style={styles.retakeButton}
-              onPress={() => setPhoto(null)}
-            >
-              <Ionicons name="refresh" size={20} color="#fff" />
-              <Text style={styles.retakeText}>Retake</Text>
-            </TouchableOpacity>
-          </LinearGradient>
+            <Ionicons name="refresh" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
       );
     }
     
     return (
-      <View style={styles.placeholderContainer}>
-        <Ionicons name="image-outline" size={80} color="#ccc" />
-        <Text style={styles.placeholderText}>Take a photo of food product</Text>
-        <Text style={styles.placeholderSubtext}>We'll analyze ingredients and suggest alternatives</Text>
-      </View>
+      <Animated.View 
+        style={[
+          styles.startContainer,
+          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }
+        ]}
+      >
+        <View style={styles.instructionsCard}>
+          <View style={styles.iconContainer}>
+            <FontAwesome5 name="utensils" size={26} color={COLORS.accent} />
+          </View>
+          <Text style={styles.instructionsTitle}>Analyze Your Food</Text>
+          <Text style={styles.instructionsText}>
+            Take a photo of your dish to get detailed nutrition information and recipe ideas
+          </Text>
+        </View>
+
+        <View style={styles.cameraOptionsContainer}>
+          <TouchableOpacity 
+            style={styles.cameraOption} 
+            onPress={handleTakePhoto}
+            activeOpacity={0.8}
+          >
+            <View style={styles.optionIcon}>
+              <Ionicons name="camera" size={24} color={COLORS.accent} />
+            </View>
+            <Text style={styles.optionLabel}>Take Photo</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.optionDivider} />
+          
+          <TouchableOpacity 
+            style={styles.cameraOption} 
+            onPress={handleChoosePhoto}
+            activeOpacity={0.8}
+          >
+            <View style={styles.optionIcon}>
+              <MaterialIcons name="photo-library" size={24} color={COLORS.accent} />
+            </View>
+            <Text style={styles.optionLabel}>Gallery</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.recentExamples}>
+          <Text style={styles.recentTitle}>Examples</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.examplesContainer}
+          >
+            {['pizza', 'salad', 'burger'].map((item, index) => (
+              <View key={index} style={styles.exampleCard}>
+                <View style={styles.exampleIconContainer}>
+                  <MaterialCommunityIcons 
+                    name={
+                      item === 'pizza' ? 'pizza' : 
+                      item === 'salad' ? 'food-apple' : 'food'
+                    } 
+                    size={24} 
+                    color={COLORS.accent} 
+                  />
+                </View>
+                <Text style={styles.exampleText}>{item}</Text>
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </Animated.View>
     );
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
-        <Text style={styles.title}>Food Scanner</Text>
-        <Text style={styles.subtitle}>Analyze food products for healthier choices</Text>
+        <Text style={styles.appName}>Safe Bite</Text>
+        <TouchableOpacity style={styles.settingsButton}>
+          <Ionicons name="settings-outline" size={22} color={COLORS.textPrimary} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.mainContent}>
+        {renderMainContent()}
       </View>
       
-      <View style={styles.photoArea}>
-        {renderPhotoContainer()}
-      </View>
+      {!photo && !isUploading && !uploadComplete && (
+        <View style={styles.appTagline}>
+          <View style={styles.taglineIconContainer}>
+            <Ionicons name="shield-checkmark" size={18} color={COLORS.accent} />
+          </View>
+          <Text style={styles.taglineText}>Food safety & nutrition assistant</Text>
+        </View>
+      )}
       
-      <View style={styles.buttonsContainer}>
-        <View style={styles.buttonWrapper}>
-          <TouchableOpacity
-            style={[styles.button, styles.cameraButton]}
-            onPress={() => handleTakePhoto()}
-            activeOpacity={0.9}
-            disabled={isUploading || uploadComplete}
+      {(photo || isUploading || uploadComplete) && (
+        <TouchableOpacity
+          style={styles.scanButton}
+          disabled={isUploading || uploadComplete}
+          activeOpacity={0.8}
+        >
+          <LinearGradient
+            colors={COLORS.buttonGradient1}
+            style={styles.scanButtonGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
           >
-            <LinearGradient
-              colors={['#4c669f', '#3b5998', '#192f6a']}
-              style={styles.buttonGradient}
-            >
-              <Ionicons name="camera" size={28} color="#fff" />
-              <Text style={styles.buttonText}>Take Photo</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.buttonWrapper}>
-          <TouchableOpacity
-            style={[styles.button, styles.galleryButton]}
-            onPress={() => handleChoosePhoto()}
-            activeOpacity={0.9}
-            disabled={isUploading || uploadComplete}
-          >
-            <LinearGradient
-              colors={['#00c6ff', '#0072ff']}
-              style={styles.buttonGradient}
-            >
-              <MaterialIcons name="photo-library" size={26} color="#fff" />
-              <Text style={styles.buttonText}>Choose Photo</Text>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+            <Text style={styles.scanButtonText}>
+              {isUploading ? "Analyzing..." : uploadComplete ? "Complete!" : "Rescan"}
+            </Text>
+            {!isUploading && !uploadComplete && (
+              <Ionicons name="scan-outline" size={20} color="#FFFFFF" style={styles.scanIcon} />
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.footerNote}>
+        <Text style={styles.dateText}>Last updated: {new Date().toLocaleDateString()}</Text>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: COLORS.background,
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: '#303f9f',
+    paddingTop: Platform.OS === 'ios' ? 10 : 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
-  title: {
-    fontSize: 28,
+  appName: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: 'white',
-    marginBottom: 5,
+    color: COLORS.accent,
   },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+  settingsButton: {
+    padding: 5,
   },
-  photoArea: {
+  mainContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  placeholderContainer: {
+  startContainer: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  instructionsCard: {
+    width: '100%',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    alignItems: 'center',
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  iconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#202020',
-    width: width * 0.8,
-    height: width * 0.8,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: '#333',
-    borderStyle: 'dashed',
-    padding: 20,
+    marginBottom: 15,
   },
-  placeholderText: {
-    marginTop: 20,
+  instructionsTitle: {
     fontSize: 18,
-    color: '#ccc',
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
   },
-  placeholderSubtext: {
-    marginTop: 10,
+  instructionsText: {
     fontSize: 14,
-    color: '#999',
+    color: COLORS.textSecondary,
     textAlign: 'center',
+    lineHeight: 20,
   },
-  photoContainer: {
-    width: width * 0.8,
-    height: width * 0.8,
+  cameraOptionsContainer: {
+    width: '100%',
+    flexDirection: 'row',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 20,
+  },
+  cameraOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  optionDivider: {
+    width: 1,
+    backgroundColor: COLORS.border,
+  },
+  optionIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  optionLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.textPrimary,
+  },
+  recentExamples: {
+    width: '100%',
+  },
+  recentTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textPrimary,
+    marginBottom: 10,
+    paddingLeft: 5,
+  },
+  examplesContainer: {
+    paddingRight: 15,
+  },
+  exampleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.cardBg,
+    marginLeft: 5,
+    padding: 10,
+    paddingRight: 15,
+    borderRadius: 12,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  exampleIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  exampleText: {
+    fontSize: 14,
+    color: COLORS.textPrimary,
+    fontWeight: '500',
+  },
+  photoWrapper: {
+    width: width * 0.9,
+    height: width * 0.9,
     borderRadius: 20,
     overflow: 'hidden',
-    elevation: 5,
-    shadowColor: '#121212',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: COLORS.accentDark,
   },
   image: {
     width: '100%',
     height: '100%',
     resizeMode: 'cover',
   },
-  imageGradient: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 80,
-    justifyContent: 'flex-end',
-    alignItems: 'flex-end',
-    paddingRight: 15,
-    paddingBottom: 15,
-  },
   retakeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    position: 'absolute',
+    top: 15,
+    right: 15,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-  },
-  retakeText: {
-    color: 'white',
-    marginLeft: 5,
-    fontSize: 14,
-  },
-  uploadingContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    width: width * 0.8,
+    borderWidth: 1,
+    borderColor: 'rgba(156, 39, 176, 0.6)',
   },
-  uploadingText: {
+  stateContainer: {
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingContainer: {
+    width: '90%',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    padding: 25,
+    alignItems: 'center',
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(156, 39, 176, 0.2)',
+  },
+  uploadingIconContainer: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  cornerIcon: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+  },
+  uploadingTitle: {
     fontSize: 18,
-    marginBottom: 20,
-    color: '#303f9f',
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: COLORS.textPrimary,
+    marginBottom: 8,
   },
-  uploadingSubtext: {
-    marginTop: 10,
+  uploadingSubtitle: {
     fontSize: 14,
-    color: '#777',
+    color: COLORS.textSecondary,
+    marginBottom: 20,
+    textAlign: 'center',
   },
-  progressBarContainer: {
+  progressBarBackground: {
     width: '100%',
     height: 6,
-    backgroundColor: '#303030',
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
     borderRadius: 3,
     overflow: 'hidden',
   },
   progressBar: {
     height: '100%',
-    backgroundColor: '#303f9f',
+    width: '60%',
   },
   successContainer: {
-    justifyContent: 'center',
+    width: '90%',
+    backgroundColor: COLORS.cardBg,
+    borderRadius: 16,
+    padding: 30,
     alignItems: 'center',
-    width: width * 0.8,
+    shadowColor: COLORS.cardShadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(76, 175, 80, 0.2)',
   },
   successCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#4caf50',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: COLORS.success,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
-  successText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#4caf50',
-    marginTop: 10,
+  successTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.success,
+    marginBottom: 8,
   },
-  successSubtext: {
-    marginTop: 5,
+  successSubtitle: {
     fontSize: 14,
-    color: '#777',
-  },
-  errorContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: width * 0.8,
-  },
-  errorText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#f44336',
-    marginTop: 10,
-  },
-  errorSubtext: {
-    marginTop: 5,
-    fontSize: 14,
-    color: '#777',
+    color: COLORS.textSecondary,
     textAlign: 'center',
-    marginHorizontal: 20,
   },
-  retryButton: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: '#f44336',
-    borderRadius: 5,
-  },
-  retryButtonText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  buttonsContainer: {
+  appTagline: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 30,
+    justifyContent: 'center',
+    marginBottom: 15,
   },
-  buttonWrapper: {
-    width: '45%',
+  taglineIconContainer: {
+    marginRight: 6,
   },
-  button: {
+  taglineText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  scanButton: {
+    width: '90%',
+    marginHorizontal: 20,
+    marginBottom: 20,
     borderRadius: 12,
     overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#000',
+    shadowColor: COLORS.accentDark,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+    elevation: 5,
+    alignSelf: 'center',
   },
-  buttonGradient: {
-    paddingVertical: 15,
-    justifyContent: 'center',
+  scanButtonGradient: {
+    paddingVertical: 14,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
   },
-  buttonText: {
-    color: 'white',
-    fontWeight: 'bold',
-    marginTop: 5,
+  scanButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  scanIcon: {
+    marginLeft: 8,
+  },
+  footerNote: {
+    alignItems: 'center',
+    paddingBottom: 15,
+  },
+  dateText: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
   }
 });
 
